@@ -82,14 +82,13 @@ image box_filter_image(image im, int s)
     for (i = 0; i < im.c; i++) {
       for (j = 0; j < im.h; j++) {
         for(k = 0; k < im.w; k++) {
-          float avg = get_pixel(integ, k + half, j + half, i) + get_pixel(integ, k - half, j - half, i) - get_pixel(integ, k + half, j - half, i) - get_pixel(integ, k - half, j + half, i);
+          float avg = get_pixel(integ, k + half, j + half, i) + get_pixel(integ, k - half - 1, j - half - 1, i) - get_pixel(integ, k + half, j - half - 1, i) - get_pixel(integ, k - half - 1, j + half, i);
           avg = avg / powf(s, 2);
           set_pixel(S, k, j, i, avg);
-          // printf("%f, %f\n", get_pixel(integ, k, j, i), get_pixel(S, k, j, i));
         }
       }
     }
-    //free_image(integ);
+    free_image(integ);
     return S;
 }
 
@@ -124,25 +123,19 @@ image time_structure_matrix(image im, image prev, int s)
         float x = get_pixel(ix, i, j, 0);
         float y = get_pixel(iy, i, j, 0);
         float t = get_pixel(im, i, j, 0) - get_pixel(prev, i, j, 0);
-        float tx = x - get_pixel(prev, i, j, 0);
-        float ty = y - get_pixel(prev, i, j, 0);
         float ix2 = powf(x, 2);
         float iy2 = powf(y, 2);
         float ixiy = x * y;
+        float ixit = x * t;
+        float iyit = y * t;
         set_pixel(time, i, j, 0, ix2);
         set_pixel(time, i, j, 1, iy2);
         set_pixel(time, i, j, 2, ixiy);
-        set_pixel(time, i, j, 3, t);
-        set_pixel(time, i, j, 4, t);
+        set_pixel(time, i, j, 3, ixit);
+        set_pixel(time, i, j, 4, iyit);
       }
     }
-    //for (i = 0; i < im.w; i++) {
-    //  for (j = 0; j < im.h; j++) {
-   //     for (int c = 0; c < time.c; c++) {
-    //      printf("%f\n", get_pixel(time, i, j, c));
-     //   }
-     // }
-   // }
+
     S = box_filter_image(time, s);
     
     free_image(time);
@@ -165,7 +158,6 @@ image velocity_image(image S, int stride)
     image v = make_image(S.w/stride, S.h/stride, 3);
     int i, j;
     matrix M = make_matrix(2,2);
-    //matrix T = make_matrix(2,1);
     for(j = (stride-1)/2; j < S.h; j += stride){
         for(i = (stride-1)/2; i < S.w; i += stride){
             float Ixx = S.data[i + S.w*j + 0*S.w*S.h];
@@ -173,34 +165,33 @@ image velocity_image(image S, int stride)
             float Ixy = S.data[i + S.w*j + 2*S.w*S.h];
             float Ixt = S.data[i + S.w*j + 3*S.w*S.h];
             float Iyt = S.data[i + S.w*j + 4*S.w*S.h];
+            //  printf("matrix univertible5\n");
 
             // TODO: calculate vx and vy using the flow equation
             M.data[0][0] = Ixx;
             M.data[0][1] = Ixy;
             M.data[1][0] = Ixy;
             M.data[1][1] = Iyy;
-            M = transpose_matrix(M);
-            
-            //T.data[0][0] += -1 * Ixt;
-            //T.data[0][1] += -1 * Iyt;
+            //  printf("matrix univertible3\n");
+            matrix invertedM = matrix_invert(M);
+            if (invertedM.data == NULL) {  // invertedM.rows == 0 && invertedM.cols == 0) {
+            //  printf("matrix univertible\n");
+              set_pixel(v, i/stride, j/stride, 0, 0);
+              set_pixel(v, i/stride, j/stride, 1, 0);
+            //  printf("matrix univertible2\n");
+              continue;
+            }
 
-            //printf("%f\n", T.data[0][0]); 
-            //printf("%f\n", T.data[0][1]); 
-            //matrix V = matrix_mult_matrix(transpose_matrix(M), T);
-     
-            //printf("%f\n", T.data[0][0]); 
-            //printf("%f\n", T.data[0][1]); 
-            float vx = (M.data[0][0] * -Ixt) + (M.data[0][1] * -Iyt);
-            float vy = (M.data[1][0] * -Ixt) + (M.data[1][1] * -Iyt);
+            float vx = (invertedM.data[0][0] * -Ixt) + (invertedM.data[0][1] * -Iyt);
+            float vy = (invertedM.data[1][0] * -Ixt) + (invertedM.data[1][1] * -Iyt);
+            free_matrix(invertedM);
+            //  printf("matrix univertible4\n");
             
-            //free_matrix(V);
-
             set_pixel(v, i/stride, j/stride, 0, vx);
             set_pixel(v, i/stride, j/stride, 1, vy);
-           // printf("%f%f\n", get_pixel(v, i/stride, j/stride, 0), vx); 
-           // printf("%f%f\n", get_pixel(v, i/stride, j/stride, 1), vy); 
         }
     }
+            //  printf("matrix univertible6\n");
     free_matrix(M);
     return v;
 }
